@@ -77,7 +77,7 @@ cloudflare-dns.com.     286     IN      A       104.16.112.25
 
 Any software to be used in production should be performance profiled for capacity planning and future optmization.
 
-- The results below are for 30 clients over 30 seconds with 60 queries a second. 
+- The results below are for 10 clients over 20 seconds with 30 queries a second. 
 - The results compared socat and the python implementation here.
 - Both setups were using the same network conditions; pointing to the same upstream. Testing was done using [dnsperf-tcp](https://github.com/Sinodun/dnsperf-tcp). Queryfile used in this test is from (ftp://ftp.nominum.com/pub/nominum/dnsperf/data/queryfile-example-current.gz).
 
