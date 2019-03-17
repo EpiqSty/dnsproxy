@@ -1,189 +1,165 @@
-## dnsproxy
+## dns2dot-proxy
 
 **Problem statement:**
 
-Implement a DNS stub resolver. It should listen on port 53 and resolve requests with an upsteam DNS server over TLS.
+Implement a DNS to DNS-over-TLS proxy. It should listen on port 53 and resolve requests with an upsteam DNS server over TLS.
 
 **Design notes:**
 
-* After  reviewing the [Cloudflare's explanation of DNS over TLS](https://developers.cloudflare.com/1.1.1.1/dns-over-tls/) and [RFC7858](https://tools.ietf.org/html/rfc7858), it was clear that the implementation to start with will basically be a TCP to TCP+TLS forwarder.
+* After reviewing the [Cloudflare's explanation of DNS over TLS](https://developers.cloudflare.com/1.1.1.1/dns-over-tls/) and [RFC7858](https://tools.ietf.org/html/rfc7858), it was clear that the implementation to start with will basically be a TCP to TCP+TLS forwarder.
 
 * This assumption was validated with `socat` utility:
 
 ````bash
 $ socat tcp-listen:2253,reuseaddr,fork openssl:1.1.1.1:853,cafile=/etc/ssl/certs/ca-certificates.crt,commonname=cloudflare-dns.com
 
-$ dig @localhost -p 2253 +tcp shyamsundar.org
-
-; <<>> DiG 9.11.3-1ubuntu1.2-Ubuntu <<>> @localhost -p 2253 +tcp shyamsundar.org
-; (1 server found)
-;; global options: +cmd
-;; Got answer:
-;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 43130
-;; flags: qr rd ra; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 1
-
-[ ... snip ...]
+$ dig @localhost -p 2253 +tcp cloudflare-dns.com
+;; ->>HEADER<<- opcode: QUERY; status: NOERROR; id: 25529
+;; Flags: qr rd ra; QUERY: 1; ANSWER: 2; AUTHORITY: 0; ADDITIONAL: 0
 
 ;; QUESTION SECTION:
-;shyamsundar.org.   IN  A
+;; cloudflare-dns.com.          IN      A
 
 ;; ANSWER SECTION:
-shyamsundar.org.  773 IN  A 185.199.108.153
-shyamsundar.org.  773 IN  A 185.199.109.153
-shyamsundar.org.  773 IN  A 185.199.110.153
-shyamsundar.org.  773 IN  A 185.199.111.153
+cloudflare-dns.com.     59      IN      A       104.16.112.25
+cloudflare-dns.com.     59      IN      A       104.16.111.25
 
-;; Query time: 89 msec
-;; SERVER: 127.0.0.1#2253(127.0.0.1)
-;; WHEN: Wed Oct 03 15:23:51 CEST 2018
-;; MSG SIZE  rcvd: 468
+;; Received 68 B
+;; Time 2019-03-17 22:12:44 STD
+;; From 127.0.0.1@2253(TCP) in 74.9 ms
 
 ````
 
 **Implementation notes:**
 
-- It is a TCP to TCP+TLS forwarder written in Python. 
+- It is a TCP to TCP+TLS forwarder written in Python, based on https://github.com/shyam/dnsproxy project.
 - Uses [maproxy](https://pypi.org/project/maproxy/) library for handling proxy operations. It internally allows Nonblocking Network I/O, by using python [tornado](https://github.com/tornadoweb/tornado) framework, an asynchronous networking library developed at FriendFeed. This allows the implementation to handle multiple requests simultaneously.
-- Docker image at [my dockerhub](https://hub.docker.com/r/shyam/dnsproxy/).
 
 **Running:**
 
 ````bash
-$ docker run -d -p 5353:53 shyam/dnsproxy:latest 
-74c80fa535b29e6562ffc76dd112f221c43322150f2bd59f75fb2ac83d36a180
+$ docker-compose up
+Starting dnsproxyepiq_dns2dot.proxy_1
+Attaching to dnsproxyepiq_dns2dot.proxy_1
+dns2dot.proxy_1  | [dns2dot-proxy] tcp://127.0.0.1:53 -> tcp+tls://1.0.0.1:853
 
 $ docker ps
-CONTAINER ID        IMAGE                    COMMAND                 CREATED             STATUS              PORTS                  NAMES
-74c80fa535b2        shyam/dnsproxy:latest   "python dnsproxy.py"   8 seconds ago       Up 7 seconds        0.0.0.0:5353->53/tcp   festive_pike
+CONTAINER ID        IMAGE               COMMAND                CREATED              STATUS              PORTS                NAMES
+ece9be629719        dns2dot.proxy       "python dnsproxy.py"   About a minute ago   Up 42 seconds       0.0.0.0:53->53/tcp   dnsproxyepiq_dns2dot.proxy_1
 
-$ docker logs festive_pike
-[dnsproxy] tcp://127.0.0.1:53 -> tcp+tls://1.1.1.1:853
-# dig @localhost -p 5353 +tcp shyamsundar.org
+$ dig @localhost -p 53 +tcp cloudflare-dns.com
 
-; <<>> DiG 9.11.3-1ubuntu1.2-Ubuntu <<>> @localhost -p 5353 +tcp shyamsundar.org
+; <<>> DiG 9.10.3-P4-Ubuntu <<>> @localhost -p 53 +tcp cloudflare-dns.com
 ; (1 server found)
 ;; global options: +cmd
 ;; Got answer:
-;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 23048
-;; flags: qr rd ra; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 1
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 57085
+;; flags: qr rd ra ad; QUERY: 1, ANSWER: 2, AUTHORITY: 0, ADDITIONAL: 1
 
 ;; OPT PSEUDOSECTION:
 ; EDNS: version: 0, flags:; udp: 1452
-; PAD: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-[ ... snip ... ]
-..............................................................................................................")
+; OPT=12: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 (".................................................................................................................................................................................................................................................................................................................................................................................................")
 ;; QUESTION SECTION:
-;shyamsundar.org.   IN  A
+;cloudflare-dns.com.            IN      A
 
 ;; ANSWER SECTION:
-shyamsundar.org.  1800  IN  A 185.199.109.153
-shyamsundar.org.  1800  IN  A 185.199.110.153
-shyamsundar.org.  1800  IN  A 185.199.111.153
-shyamsundar.org.  1800  IN  A 185.199.108.153
+cloudflare-dns.com.     286     IN      A       104.16.111.25
+cloudflare-dns.com.     286     IN      A       104.16.112.25
 
-;; Query time: 78 msec
-;; SERVER: 127.0.0.1#5353(127.0.0.1)
-;; WHEN: Wed Oct 03 15:06:44 CEST 2018
+;; Query time: 44 msec
+;; SERVER: 127.0.0.1#53(127.0.0.1)
+;; WHEN: Sun Mar 17 22:44:23 STD 2019
 ;; MSG SIZE  rcvd: 468
 
 ````
 
 **Performance profiling:**
 
-Any software to be used in productionshould be performance profiled for capacity planning and future optmization.
+Any software to be used in production should be performance profiled for capacity planning and future optmization.
 
 - The results below are for 30 clients over 30 seconds with 60 queries a second. 
-- The results compared Stubby, socat and the python implementation here.
-- All the three setups were using the same network conditions; pointing to the same upstream. Testing was done using [dnsperf-tcp](https://github.com/Sinodun/dnsperf-tcp). Queryfile used in this test is from (ftp://ftp.nominum.com/pub/nominum/dnsperf/data/queryfile-example-current.gz).
+- The results compared socat and the python implementation here.
+- Both setups were using the same network conditions; pointing to the same upstream. Testing was done using [dnsperf-tcp](https://github.com/Sinodun/dnsperf-tcp). Queryfile used in this test is from (ftp://ftp.nominum.com/pub/nominum/dnsperf/data/queryfile-example-current.gz).
 
 With smaller number of clients and smaller timeframe, the Average RTT is nearly same. However with some load (larger number of clients and timeframe), the deviation is visible. 
 
 ```
-[*] using stubby
-
-./dnsperf -d queryfile-example-current -l 30 -c 10 -Q 60 -z -p 9553
-DNS Performance Testing Tool
-Nominum Version 2.1.0.0
-
-[Status] Command line: dnsperf -d queryfile-example-current -l 30 -c 10 -Q 60 -z -p 9553
-[Status] Sending queries (to 127.0.0.1)
-[Status] Started at: Wed Oct  3 23:44:54 2018
-[Status] Stopping after 30.000000 seconds
-[Status] Testing complete (time limit)
-
-Statistics:
-
-  Queries sent:         1800
-  Queries completed:    1800 (100.00%)
-  Queries lost:         0 (0.00%)
-
-  Response codes:       NOERROR 1321 (73.39%), SERVFAIL 21 (1.17%), NXDOMAIN 458 (25.44%)
-  Average packet size:  request 40, response 504
-  Run time (s):         31.073661
-  Queries per second:   57.926873
-  TCP connections:      10
-  Ave Queries per conn: 180
-
-  Average RTT (s):      0.074498 (min 0.016354, max 4.274376)
-  RTT StdDev (s):       0.276049
-
-
 [*] using socat
 
-./dnsperf -d queryfile-example-current -l 30 -c 10 -Q 60 -z -p 2253
+$ dnsperf -d queryfile-example-current -l 20 -c 10 -Q 30 -z -p 53
 DNS Performance Testing Tool
 Nominum Version 2.1.0.0
 
-[Status] Command line: dnsperf -d queryfile-example-current -l 30 -c 10 -Q 60 -z -p 2253
-[Status] Sending queries (to 127.0.0.1)
-[Status] Started at: Wed Oct  3 23:00:30 2018
-[Status] Stopping after 30.000000 seconds
+[Status] Command line: dnsperf -d queryfile-example-current -l 20 -c 10 -Q 30 -z -p 53
+[Status] Sending queries (to 127.0.0.1) over TCP
+[Status] Started at: Sun Mar 17 23:02:31 2019
+[Status] Stopping after 20.000000 seconds
+[Timeout] Query timed out: msg id 484
 [Status] Testing complete (time limit)
 
 Statistics:
 
-  Queries sent:         1800
-  Queries completed:    1800 (100.00%)
-  Queries lost:         0 (0.00%)
+  Queries sent:         600
+  Queries completed:    599 (99.83%)
+  Queries lost:         1 (0.17%)
 
-  Response codes:       NOERROR 1319 (73.28%), SERVFAIL 23 (1.28%), NXDOMAIN 458 (25.44%)
+  Response codes:       NOERROR 434 (72.45%), SERVFAIL 10 (1.67%), NXDOMAIN 155 (25.88%)
   Average packet size:  request 40, response 97
-  Run time (s):         31.639477
-  Queries per second:   56.890953
-  TCP connections:      10
-  Ave Queries per conn: 180
+  Run time (s):         20.000920
+  Queries per second:   29.948622
 
-  Average RTT (s):      0.075915 (min 0.012384, max 4.289669)
-  RTT StdDev (s):       0.341624
+  TCP connections:      10
+  Ave Queries per conn: 60
+  TCP HS time per client (s):          0.000000  (0.00%)
+  TLS HS time per client (s):          0.000000  (0.00%)
+  Total HS time per client (s):        0.000000  (0.00%)
+  TCP HS time per connection (s):      0.000000
+  TLS HS time per connection (s):      0.000000
+  Total HS time per connection (s):    0.000000
+  Adjusted Queries/s:   29.948622
+
+
+  Average RTT (s):      0.073684 (min 0.008143, max 4.232572)
+  RTT StdDev (s):       0.357560
 
 
 [*] using the python implementation
 
-$ ./dnsperf -d queryfile-example-current -l 30 -c 10 -Q 60 -z -p 2553
+$ dnsperf -d queryfile-example-current -l 20 -c 10 -Q 30 -z -p 53
 DNS Performance Testing Tool
 Nominum Version 2.1.0.0
 
-[Status] Command line: dnsperf -d queryfile-example-current -l 30 -c 10 -Q 60 -z -p 2553
-[Status] Sending queries (to 127.0.0.1)
-[Status] Started at: Wed Oct  3 22:58:41 2018
-[Status] Stopping after 30.000000 seconds
+[Status] Command line: dnsperf -d queryfile-example-current -l 20 -c 10 -Q 30 -z -p 53
+[Status] Sending queries (to 127.0.0.1) over TCP
+[Status] Started at: Sun Mar 17 22:56:57 2019
+[Status] Stopping after 20.000000 seconds
+[Timeout] Query timed out: msg id 484
 [Status] Testing complete (time limit)
 
 Statistics:
 
-  Queries sent:         1800
-  Queries completed:    1800 (100.00%)
-  Queries lost:         0 (0.00%)
+  Queries sent:         600
+  Queries completed:    599 (99.83%)
+  Queries lost:         1 (0.17%)
 
-  Response codes:       NOERROR 1316 (73.11%), SERVFAIL 26 (1.44%), NXDOMAIN 458 (25.44%)
-  Average packet size:  request 40, response 96
-  Run time (s):         31.767947
-  Queries per second:   56.660885
+  Response codes:       NOERROR 435 (72.62%), SERVFAIL 9 (1.50%), NXDOMAIN 155 (25.88%)
+  Average packet size:  request 40, response 98
+  Run time (s):         20.434241
+  Queries per second:   29.313543
+
   TCP connections:      10
-  Ave Queries per conn: 180
+  Ave Queries per conn: 60
+  TCP HS time per client (s):          0.000000  (0.00%)
+  TLS HS time per client (s):          0.000000  (0.00%)
+  Total HS time per client (s):        0.000000  (0.00%)
+  TCP HS time per connection (s):      0.000000
+  TLS HS time per connection (s):      0.000000
+  Total HS time per connection (s):    0.000000
+  Adjusted Queries/s:   29.313543
 
-  Average RTT (s):      0.120437 (min 0.014077, max 4.884248)
-  RTT StdDev (s):       0.387267
+
+  Average RTT (s):      0.138459 (min 0.009746, max 4.328004)
+  RTT StdDev (s):       0.387683
 ```
 
 **Applications:**
@@ -197,6 +173,8 @@ Statistics:
 
 **Security Concerns and other areas of improvement:**
 
+* Python 2.7 will retire in 2020, this case can't be considered as long-term solution.
+  
 * Implement proper validation of SSL/TLS certificates including SPKI Pinning. 
   * This is particularly important to ensure that the upstream DNS service is not compromised. 
 
@@ -215,43 +193,8 @@ Statistics:
 
 * Ability to handle UDP based DNS resolution.
 
-**Fun sidenote:**
-
-`nginx` can also be setup to handle as tcp to tcp+tls reverse proxy. The following snippet added to nginx.conf was able to perform DNS resolution over TCP+TLS to cloudflare's DNS.
-
-````
-# nginx.conf
-[...snip...]
-stream {
-  upstream cloudflare_dns_servers {
-    server 1.1.1.1:853;
-    server 1.0.0.1:853;
-  }
-
-  server {
-    listen 1553;
-    listen 1553 udp;
-    proxy_responses 1;
-    proxy_timeout 2s;
-    proxy_ssl on;
-    proxy_ssl_name "cloudflare-dns.com";
-    proxy_ssl_protocols TLSv1.2;
-    proxy_ssl_verify on;
-    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
-    error_log /var/log/nginx/serror.log;
-    proxy_pass cloudflare_dns_servers;
-  }
-
-  log_format stream  '$time_iso8601 $session_time '
-                     '[$server_addr]:$server_port [$remote_addr]:$remote_port '
-                     '$ssl_protocol$ssl_session_reused$ssl_cipher $ssl_server_name '
-                     '$status $bytes_sent $bytes_received';
-
-  access_log /var/log/nginx/stream.log stream;
-}
-[...snip...]
-````
-
 **Author:**
 
 [Shyam Sundar C S](mailto:csshyamsundar@gmail.com) 
+
+updated by [Epiq Sty](mailto:epiq.sty@gmail.com)

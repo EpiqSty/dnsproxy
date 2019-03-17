@@ -1,6 +1,6 @@
 FROM python:2.7-alpine
 
-MAINTAINER Shyam Sundar C S <csshyamsundar@gmail.com>
+LABEL AUTHOR="Epiq Sty <epiq.sty@gmail.com>"
 
 ENV PYTHONUNBUFFERED=0
 

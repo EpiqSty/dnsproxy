@@ -1,0 +1,13 @@
+version: '2'
+services:
+  dns2dot.proxy:
+    build: .
+    image: dns2dot.proxy
+    environment:
+      - DoT_IP=1.0.0.1
+      - DoT_Port=853
+      - DNS_Port=53
+      - DoT_SSL_options=True
+    ports:
+      - "53:53"
+    
