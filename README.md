@@ -198,3 +198,6 @@ Statistics:
 [Shyam Sundar C S](mailto:csshyamsundar@gmail.com) 
 
 updated by [Epiq Sty](mailto:epiq.sty@gmail.com)
+
+**Changelog:**
+[x] added SSL verification agaist the system's ca-certificates.crt
