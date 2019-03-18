@@ -4,10 +4,10 @@ services:
     build: .
     image: dns2dot.proxy
     environment:
-      - DoT_IP=1.0.0.1
+      - DoT_IP=9.9.9.9
       - DoT_Port=853
       - DNS_Port=53
-      - DoT_SSL_options=True
+      - DoT_SSL_cert=/etc/ssl/certs/ca-certificates.crt
     ports:
       - "53:53"
     
